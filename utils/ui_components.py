@@ -34,7 +34,7 @@ class CustomHeaderView(QHeaderView):
                 checkbox.setCheckState(Qt.CheckState(state))
 
 
-def create_action_widget(callback) -> QWidget:
+def create_btn_widget(callback) -> QWidget:
     # 创建widget容器
     widget = QWidget()
     layout = QHBoxLayout(widget)
@@ -44,4 +44,18 @@ def create_action_widget(callback) -> QWidget:
     edit_btn.clicked.connect(callback)
 
     layout.addWidget(edit_btn)
+    return widget
+
+def create_combo_widget(callback) -> QWidget:
+    widget = QWidget()
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    # 编辑按钮
+    # operations_combo = ComboBox()
+    # operations_combo.addItems(['------', '编辑', '打印单据'])
+    # operations_combo.clicked.connect(callback)
+    print_btn = PushButton('打印单据')
+    print_btn.clicked.connect(callback)
+
+    layout.addWidget(print_btn)
     return widget

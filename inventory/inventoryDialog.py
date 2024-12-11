@@ -1,10 +1,10 @@
-from decimal import Decimal
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QGridLayout, QComboBox, QHBoxLayout
-from qfluentwidgets import MessageBoxBase, LineEdit, ComboBox, StrongBodyLabel, SubtitleLabel, EditableComboBox, \
-    PushButton, InfoBar
-from backendRequests.jsonRequests import get_request
-from inventory.db_utils import load_categories
+from PyQt6.QtWidgets import QGridLayout
+from qfluentwidgets import MessageBoxBase, LineEdit, ComboBox, StrongBodyLabel, SubtitleLabel, InfoBar
+from backendRequests.jsonRequests import APIClient
+from config import URL
+from utils.db_utils import load_categories
+from utils.worker import Worker
 
 class BaseInventoryDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
@@ -129,7 +129,9 @@ class UpdateInventoryDialog(BaseInventoryDialog):
         self.set_inventory_info()
 
     def set_inventory_info(self):
-        response = get_request(f"http://127.0.0.1:5000/inventory/{self.cargo_id}")
+        url = URL + f'/inventory/{self.cargo_id}'
+        # response = APIClient.get_request(url)
+        response = Worker.unpack_thread_queue(APIClient.get_request, url)
         if response['success']:
             data = response['inventory']
             self.cargo_name_input.setText(data['cargo_name'])

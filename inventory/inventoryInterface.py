@@ -1,16 +1,18 @@
-import math, urllib, sys, openpyxl
+import math, sys, openpyxl
 from datetime import datetime
-
+from config import URL
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication, QHeaderView, QTableWidgetItem, \
      QFileDialog
-from qfluentwidgets import CardWidget, PushButton, SearchLineEdit, TableWidget, setCustomStyleSheet, InfoBar, CheckBox, \
+from qfluentwidgets import CardWidget, PushButton, TableWidget, setCustomStyleSheet, InfoBar, CheckBox, \
     MessageBox, LineEdit, ComboBox, PrimaryPushButton, StrongBodyLabel, SmoothMode
-from utils.custom_styles import ADD_BUTTON_STYLE, DELETE_BUTTON_STYLE
-from backendRequests.jsonRequests import get_request, post_request, delete_request
-from inventoryDialog import AddInventoryDialog, UpdateInventoryDialog
-from utils.ui_components import create_action_widget, CustomHeaderView
-from inventory.db_utils import load_categories
+from utils.custom_styles import ADD_BUTTON_STYLE
+from backendRequests.jsonRequests import APIClient
+from inventory.inventoryDialog import AddInventoryDialog, UpdateInventoryDialog
+from utils.db_utils import load_categories
+from utils.ui_components import create_btn_widget
+from utils.token_utils import decode_token
+from utils.worker import Worker
 
 
 class InventoryInterface(QWidget):
@@ -142,41 +144,43 @@ class InventoryInterface(QWidget):
 
     def get_count(self):
         """获取数据的总量或者分类数据的总量，用于设置分页控制器"""
-        url = 'http://127.0.0.1:5000/inventory/count'
+        url = URL + '/inventory/count'
         if self.categoriesComboBox.currentIndex() != 0:
             # 当分类选框有实际选中时，构造带参的url参数为category=被选中的分类Text
             url += '?category=' + self.categoriesComboBox.currentText()
-            response = get_request(url)
-        else:
-            response = get_request(url)
+
+        response = Worker.unpack_thread_queue(APIClient.get_request, url)
         count = response['count']
         return count
 
     def load_data(self):
-        # 从后端获取数据
-        url = f'http://127.0.0.1:5000/inventory/page/{self.current_page}'
-        if self.categoriesComboBox.currentIndex() == 0:
-            # 分类选框为全部类别时的分页控制器
-            count = self.get_count()
-            self.total_pages = math.ceil(count / self.per_page)
-            self.update_pagination_controls()
-            result = get_request(url)
-        else:
-            # 当分类被选中时，构造带参url
-            url += '?category=' + self.categoriesComboBox.currentText()
-            result = get_request(url)
-            self.update_pagination_controls()
-        # 判断返回值类型
-        if isinstance(result, (dict, list)):  # 有效 JSON
-            if result['success'] is True:  # 有数据
-                self.inventories = result['data']
-                self.populate_table()
+        try:
+            # 从后端获取数据
+            url = f'{URL}/inventory/page/{self.current_page}'
+            if self.categoriesComboBox.currentIndex() == 0:
+                # 分类选框为全部类别时的分页控制器
+                count = self.get_count()
+                self.total_pages = math.ceil(count / self.per_page)
+                self.update_pagination_controls()
+                result = Worker.unpack_thread_queue(APIClient.get_request, url)
             else:
-                InfoBar.warning(title='获取数据失败', content=result['message'], parent=self, duration=5000)
-        elif isinstance(result, str):  # 错误信息
-            InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=10000)
-        else:
-            print("Unexpected result:", result)
+                # 当分类被选中时，构造带参url
+                url += '?category=' + self.categoriesComboBox.currentText()
+                result = Worker.unpack_thread_queue(APIClient.get_request, url)
+                self.update_pagination_controls()
+            # 判断返回值类型
+            if isinstance(result, (dict, list)):  # 有效 JSON
+                if result['success'] is True:  # 有数据
+                    self.inventories = result['data']
+                    self.populate_table()
+                else:
+                    InfoBar.warning(title='获取数据失败', content=result['message'], parent=self, duration=5000)
+            elif isinstance(result, str):  # 错误信息
+                InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=10000)
+            else:
+                print("Unexpected result:", result)
+        except Exception as e:
+            print(e)
 
     def update_pagination_controls(self):
         # 判断分页是否有数据，如果有显示当前是第几页，一共几页，否则显示0页
@@ -200,18 +204,28 @@ class InventoryInterface(QWidget):
             self.setup_table_row(row, inventory_info)
 
     def setup_table_row(self, row: int, inventory_info: dict):
+        token = APIClient.jwt_token
+        payload = decode_token(token)
+        privilege = payload.get('permissions')
         # 将多选框绘制到每行的首列
         checkbox = CheckBox()
         self.table_widget.setCellWidget(row, 0, checkbox)
         for col, key in enumerate(['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'total_price']):
-            value = inventory_info.get(key, '')
+            match key:
+                case 'price':
+                    value = '***' if privilege == 'W' else inventory_info.get(key, '')
+                case 'total_price':
+                    value = '***' if privilege in 'W' else inventory_info.get(key, '')
+                case _:
+                    value = inventory_info.get(key, '')
             # 单元格赋值
             item = QTableWidgetItem(str(value))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.table_widget.setItem(row, col + 1, item)  #注意：第一列是多选框，所以在赋值时从第二列开始
 
         # 为每行添加编辑按钮
-        action_widget = create_action_widget(
+        action_widget = create_btn_widget(
             callback=lambda: self.update_inventory(inventory_info['cargo_id'])
         )
         self.table_widget.setCellWidget(row, 8, action_widget)  # 将组件添加到每行的最后一列
@@ -221,7 +235,9 @@ class InventoryInterface(QWidget):
             dialog = UpdateInventoryDialog(cargo_id, self)
             if dialog.exec():
                 new_inventory_info = dialog.get_inventory_info()
-                response = post_request(f'http://127.0.0.1:5000/inventory/update/{cargo_id}', new_inventory_info)
+                url = f'{URL}/inventory/update/{cargo_id}'
+                #response = APIClient.post_request(f'http://127.0.0.1:5000/inventory/update/{cargo_id}', new_inventory_info)
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, new_inventory_info)
                 if response.get('success'):
                     InfoBar.success(title='操作成功', content=response.get('message'), parent=self, duration=4000)
                     self.load_data()
@@ -237,7 +253,9 @@ class InventoryInterface(QWidget):
             dialog = AddInventoryDialog(self)
             if dialog.exec():
                 inventory_info = dialog.get_inventory_info()
-                response = post_request('http://127.0.0.1:5000/inventory/create', inventory_info)
+                url = f'{URL}/inventory/create'
+                # response = APIClient.post_request('http://127.0.0.1:5000/inventory/create', inventory_info)
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, inventory_info)
                 # print(f'response: {response}')
                 if response.get('success'):
                     InfoBar.success(title='操作成功', content=response.get('message'), parent=self, duration=4000)
@@ -258,7 +276,9 @@ class InventoryInterface(QWidget):
             else:
                 w = MessageBox("确认删除", f'确定要删除 {len(selected_inventory_ids)} 个条目吗?', self)
                 if w.exec():
-                    response = delete_request('http://127.0.0.1:5000/inventory/delete', selected_inventory_ids)
+                    url = f'{URL}/inventory/delete'
+                    #response = APIClient.delete_request('http://127.0.0.1:5000/inventory/delete', selected_inventory_ids)
+                    response = Worker.unpack_thread_queue(APIClient.delete_request, url, selected_inventory_ids)
                     if response.get('success'):
                         InfoBar.success(title='操作成功', content=response.get('message'), parent=self, duration=4000)
                         self.load_data()
@@ -291,13 +311,14 @@ class InventoryInterface(QWidget):
                 self.update_pagination_controls()
                 self.hide_pagination(True)
             else:
-                url = "http://127.0.0.1:5000/inventory/search?"
+                url = f"{URL}/inventory/search?"
                 if cargo_name:
                     url += f"cargo_name={cargo_name}"
                 if model:
                     url += f"&model={model}"
                 self.categoriesComboBox.setCurrentIndex(0)
-                response = get_request(url)
+                # response = APIClient.get_request(url)
+                response = Worker.unpack_thread_queue(APIClient.get_request, url)
 
                 if response.get('success'):
                     self.inventories = response.get('data')
@@ -324,8 +345,9 @@ class InventoryInterface(QWidget):
                 self.load_data()
                 self.populate_table()
             else:
-                url = f"http://127.0.0.1:5000/inventory/search?category={self.categoriesComboBox.currentText()}"
-                response = get_request(url)
+                url = f"{URL}/inventory/search?category={self.categoriesComboBox.currentText()}"
+                # response = APIClient.get_request(url)
+                response = Worker.unpack_thread_queue(APIClient.get_request, url)
                 if response.get('success'):
                     # print(response.get('data'))
                     self.inventories = response.get('data')
@@ -359,7 +381,8 @@ class InventoryInterface(QWidget):
                     url = f"http://127.0.0.1:5000/inventory/all"
                 else:
                     url = f"http://127.0.0.1:5000/inventory/all?category={category}"
-                response = get_request(url)
+                # response = APIClient.get_request(url)
+                response = Worker.unpack_thread_queue(APIClient.get_request, url)
                 if response.get('error'):
                     InfoBar.warning(title='操作失败', content=response.get('error'), parent=self, duration=4000)
                     return
@@ -431,11 +454,12 @@ class InventoryInterface(QWidget):
                                 "price": price,
                             }
                             dataset.append(info)
-                    url = f"http://127.0.0.1:5000/inventory/import"
+                    url = f"{URL}/inventory/import"
                     json = {
                         "dataset": dataset
                     }
-                    response = post_request(url, json)
+                    # response = APIClient.post_request(url, json)
+                    response = Worker.unpack_thread_queue(APIClient.post_request, url, json)
                     res = response.get('success')
                     skipped_row_backend = response.get('skipped_row')
                     skipped_row.append(skipped_row_backend)
@@ -450,7 +474,6 @@ class InventoryInterface(QWidget):
                         self.populate_table()
         except Exception as e:
             InfoBar.error(title="操作失败", content=str(e), parent=self, duration=5000)
-
 
 
 if __name__ == '__main__':
