@@ -132,7 +132,7 @@ class EmployeeInterface(QWidget):
             self.populate_table()
         else:
             url = URL + f'/employees/search?condition={condition}'
-            response = APIClient.get_request(url)
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
             if response.get('success') is True:
                 self.employees = response.get('data')
                 self.populate_table()
@@ -149,7 +149,7 @@ class EmployeeInterface(QWidget):
             dialog = AddEmployeeDialog(self)
             if dialog.exec():
                 info = dialog.get_employee_info()
-                response = APIClient.post_request(url, info)
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, info)
                 if response.get('success') is True:
                     InfoBar.success(title='操作成功', content=response.get('message'), parent=self, duration=5000)
                     self.load_data()
@@ -167,15 +167,21 @@ class EmployeeInterface(QWidget):
             dialog = UpdateEmployeeDialog(employee_id, self)
             if dialog.exec():
                 new_employee_info = dialog.get_employee_info()
-                response = APIClient.post_request(url, new_employee_info)
-                if response['success'] is True:
+                print(f'new_employee_info: {new_employee_info}')
+                print(f'type of new_employee_info: {type(new_employee_info)}')
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, new_employee_info)
+                print(response)
+                if response.get('success') is True:
                     InfoBar.success(title='操作成功', content=response['message'], parent=self, duration=5000)
                     self.load_data()
                     self.populate_table()
-                elif response['success'] is False:
+                    return
+                elif response.get('success') is False:
                     InfoBar.error(title='操作失败', content=response['message'], parent=self, duration=5000)
-                elif response['error'] is not None:
+                    return
+                elif response.get('success') is not None:
                     InfoBar.error(title='操作失败', content=response['error'], parent=self, duration=5000)
+                    return
         except Exception as e:
             print(e)
 
@@ -183,7 +189,7 @@ class EmployeeInterface(QWidget):
         url = URL + '/employees/delete'
         selected_ids = self.get_selected_employee_ids()
         try:
-            response = APIClient.delete_request(url, selected_ids)
+            response = Worker.unpack_thread_queue(APIClient.delete_request, url, selected_ids)
             print(response)
             if response.get('success') is True:
                 self.load_data()

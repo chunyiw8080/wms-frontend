@@ -11,7 +11,7 @@ from backendRequests.jsonRequests import APIClient
 from inventory.inventoryDialog import AddInventoryDialog, UpdateInventoryDialog
 from utils.db_utils import load_categories
 from utils.ui_components import create_btn_widget
-from utils.token_utils import decode_token
+from utils.token_utils import decode_token, get_privilege
 from utils.worker import Worker
 
 
@@ -23,6 +23,9 @@ class InventoryInterface(QWidget):
 
         # 后端返回的数据条目集合
         self.inventories = []
+        self.permission = ''
+        self.enm_header = []
+        self.column_count = 0
 
         # 分页属性
         self.current_page = 1
@@ -33,6 +36,12 @@ class InventoryInterface(QWidget):
         self.load_data()
 
     def setup_ui(self):
+        # token = APIClient.jwt_token
+        # payload = decode_token(token)
+        self.permission = get_privilege(APIClient.jwt_token)
+        self.enm_header = ['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'total_price'] if self.permission != 'W' else ['cargo_id', 'cargo_name', 'model', 'categories', 'count']
+        self.column_count = 9 if self.permission != 'W' else 6
+
         # 父布局 - 垂直布局
         layout = QVBoxLayout(self)
 
@@ -69,6 +78,10 @@ class InventoryInterface(QWidget):
         self.execBtn = PushButton('执行', self)
         setCustomStyleSheet(self.execBtn, ADD_BUTTON_STYLE, ADD_BUTTON_STYLE)
         self.execBtn.clicked.connect(self.exec_operations)
+        if self.permission == 'W':
+            self.operations_label.hide()
+            self.operationsComboBox.hide()
+            self.execBtn.hide()
 
         buttons_layout.addWidget(self.category_label)
         buttons_layout.addWidget(self.categoriesComboBox)
@@ -93,9 +106,13 @@ class InventoryInterface(QWidget):
         self.table_widget.scrollDelagate.verticalSmoothScroll.setSmoothMode(SmoothMode.NO_SMOOTH)
 
         # 设置表头
-        self.table_widget.setColumnCount(9)
-        self.table_widget.setHorizontalHeaderLabels(
-            ["", "货品编号", "货品名称", "型号", "类别", "数量", "单价", "总价", "操作"])
+        self.table_widget.setColumnCount(self.column_count)
+        if self.permission != 'W':
+            self.table_widget.setHorizontalHeaderLabels(
+                ["", "货品编号", "货品名称", "型号", "类别", "数量", "单价", "总价", "操作"])
+        else:
+            self.table_widget.setHorizontalHeaderLabels(
+                ["", "货品编号", "货品名称", "型号", "类别", "数量"])
 
         # self.custom_header = CustomHeaderView(orientation=Qt.Orientation.Horizontal, parent=self.table_widget)
         # self.table_widget.setHorizontalHeader(self.custom_header)
@@ -204,31 +221,26 @@ class InventoryInterface(QWidget):
             self.setup_table_row(row, inventory_info)
 
     def setup_table_row(self, row: int, inventory_info: dict):
-        token = APIClient.jwt_token
-        payload = decode_token(token)
-        privilege = payload.get('permissions')
+        # token = APIClient.jwt_token
+        # payload = decode_token(token)
+        # privilege = payload.get('permissions')
         # 将多选框绘制到每行的首列
         checkbox = CheckBox()
         self.table_widget.setCellWidget(row, 0, checkbox)
-        for col, key in enumerate(['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'total_price']):
-            match key:
-                case 'price':
-                    value = '***' if privilege == 'W' else inventory_info.get(key, '')
-                case 'total_price':
-                    value = '***' if privilege in 'W' else inventory_info.get(key, '')
-                case _:
-                    value = inventory_info.get(key, '')
+        # ['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'total_price']
+        for col, key in enumerate(self.enm_header):
+            value = inventory_info.get(key, '')
             # 单元格赋值
             item = QTableWidgetItem(str(value))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.table_widget.setItem(row, col + 1, item)  #注意：第一列是多选框，所以在赋值时从第二列开始
-
-        # 为每行添加编辑按钮
-        action_widget = create_btn_widget(
-            callback=lambda: self.update_inventory(inventory_info['cargo_id'])
-        )
-        self.table_widget.setCellWidget(row, 8, action_widget)  # 将组件添加到每行的最后一列
+        if self.permission != 'W':
+            # 为每行添加编辑按钮
+            action_widget = create_btn_widget(
+                callback=lambda: self.update_inventory(inventory_info['cargo_id'])
+            )
+            self.table_widget.setCellWidget(row, self.column_count - 1, action_widget)  # 将组件添加到每行的最后一列
 
     def update_inventory(self, cargo_id: str):
         try:

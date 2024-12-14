@@ -31,3 +31,8 @@ def decode_token(token: str) -> dict:
     except jwt.InvalidTokenError:
         print("无效的 Token")
     return {}
+
+
+def get_privilege(token: str) -> str:
+    payload = jwt.decode(token, TOKEN_SECRET_KEY, algorithms=["HS256"])
+    return payload.get('permissions')

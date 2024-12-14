@@ -22,7 +22,7 @@ class LoginWindow(QWidget):
         self.setWindowIcon(QIcon('../resources/logo/logo.png'))
         self.setFixedSize(1024, 576)
 
-        self.background = QPixmap("../resources/images/213-logo.jpg")  # Replace with your image path
+        self.background = QPixmap("../resources/images/background.jpg")  # Replace with your image path
         self.background = self.background.scaled(QSize(1024, 576), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                                  Qt.TransformationMode.SmoothTransformation)
 
@@ -79,6 +79,10 @@ class LoginWindow(QWidget):
 
     def login(self):
         url = URL + '/users/login'
+        if not self.username_input.text().strip() and not self.password_input.text().strip():
+            InfoBar.error(title='登录失败', content="请输入用户名和密码", orient=Qt.Orientation.Vertical,
+                          isClosable=True, position=InfoBarPosition.TOP_RIGHT, duration=4000, parent=self)
+            return
         credentials = {
             "username": self.username_input.text().strip(),
             "password": self.password_input.text().strip()

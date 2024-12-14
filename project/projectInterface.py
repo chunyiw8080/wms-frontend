@@ -172,7 +172,6 @@ class ProjectInterface(QWidget):
             if dialog.exec():
                 project = dialog.get_project_info()
                 url = URL + f'/project/update/{project_name}'
-                # response = APIClient.post_request(url, project)
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, project)
                 print(response)
                 if response.get('success') is True:

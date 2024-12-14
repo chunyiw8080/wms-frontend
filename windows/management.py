@@ -9,6 +9,8 @@ from employee.employeeInterface import EmployeeInterface
 from project.projectInterface import ProjectInterface
 from provider.providerInterface import ProviderInterface
 from users.userInterface import UserInterface
+from history.historyInterface import HistoryInterface
+from operation_logs.logsInterface import LogsInterface
 from backendRequests.jsonRequests import APIClient
 from utils.token_utils import decode_token
 from config import URL
@@ -25,6 +27,8 @@ class MainWindow(MSFluentWindow):
         self.projectInterface = ProjectInterface()
         self.providerInterface = ProviderInterface()
         self.userInterface = UserInterface()
+        self.historyInterface = HistoryInterface()
+        self.logsInterface = LogsInterface()
 
         self.initNavigation()
         self.initWindow()
@@ -36,11 +40,14 @@ class MainWindow(MSFluentWindow):
             "project_icon": QIcon('../resources/icons/project.svg'),
             "provider_icon": QIcon('../resources/icons/provider.svg'),
             "user_icon": QIcon('../resources/icons/users.svg'),
-            "employee_icon": QIcon('../resources/icons/employee.svg')
+            "employee_icon": QIcon('../resources/icons/employee.svg'),
+            "file_icon": QIcon('../resources/icons/file.svg'),
+            "logs_icon": QIcon('../resources/icons/logs.svg'),
         }
 
     def initNavigation(self):
         self.addSubInterface(self.inventoryInterface, self.load_subinterface_icons().get("inventory_icon"), '库存管理')
+        self.addSubInterface(self.historyInterface, self.load_subinterface_icons().get('file_icon'), '历史记录')
         self.addSubInterface(self.ordersInterface, self.load_subinterface_icons().get("order_icon"), '出入库管理')
         self.addSubInterface(self.projectInterface, self.load_subinterface_icons().get("project_icon"), '项目管理')
         self.addSubInterface(self.providerInterface, self.load_subinterface_icons().get("provider_icon"), '供应商管理')
@@ -48,6 +55,9 @@ class MainWindow(MSFluentWindow):
         if self.payload.get('permissions') == 'A':
             self.addSubInterface(self.userInterface, self.load_subinterface_icons().get("user_icon"), '用户管理')
             self.addSubInterface(self.employeeInterface, self.load_subinterface_icons().get("employee_icon"), '员工管理')
+            self.addSubInterface(self.logsInterface, self.load_subinterface_icons().get("logs_icon"), '操作日志')
+            # position=NavigationItemPosition.BOTTOM
+
 
 
     def initWindow(self):
