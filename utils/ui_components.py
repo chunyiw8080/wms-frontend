@@ -50,10 +50,7 @@ def create_combo_widget(callback) -> QWidget:
     widget = QWidget()
     layout = QHBoxLayout(widget)
     layout.setContentsMargins(0, 0, 0, 0)
-    # 编辑按钮
-    # operations_combo = ComboBox()
-    # operations_combo.addItems(['------', '编辑', '打印单据'])
-    # operations_combo.clicked.connect(callback)
+
     print_btn = PushButton('打印单据')
     print_btn.clicked.connect(callback)
 

@@ -5,6 +5,9 @@ from backendRequests.jsonRequests import APIClient
 from config import URL
 from utils.db_utils import load_categories
 from utils.worker import Worker
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class BaseInventoryDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
@@ -27,17 +30,18 @@ class BaseInventoryDialog(MessageBoxBase):
         self.category_combo.addItem('未分类')
         self.category_combo.addItems(load_categories())
 
-        # self.add_category_btn = PushButton('新建类别', self)
 
         self.count_input = LineEdit(self)
         self.price_input = LineEdit(self)
+        self.specification_input = LineEdit(self)
 
         fileds = [
             ("货品名称: ", self.cargo_name_input),
             ("型号: ", self.model_input),
             ("类别: ", self.category_combo),
             ("初始数量: ", self.count_input),
-            ("单价: ", self.price_input)
+            ("单价: ", self.price_input),
+            ("规格: ", self.specification_input),
         ]
 
         for row, (label_text, widget) in enumerate(fileds):
@@ -54,7 +58,7 @@ class BaseInventoryDialog(MessageBoxBase):
         self.cancelButton.setText('取消')
 
         # 设置输入框宽度
-        for widget in [self.cargo_name_input, self.model_input, self.category_combo, self.count_input, self.price_input]:
+        for widget in [self.cargo_name_input, self.model_input, self.category_combo, self.count_input, self.price_input, self.specification_input]:
             widget.setMinimumWidth(200)
 
         # 设置光标默认定位到id输入框
@@ -103,8 +107,9 @@ class BaseInventoryDialog(MessageBoxBase):
             'cargo_name': self.cargo_name_input.text(),
             'model': self.model_input.text(),
             'categories': self.category_combo.currentText(),
-            'count': self.count_input.text(),
-            'price': self.price_input.text()
+            'count': self.count_input.text().strip(),
+            'price': self.price_input.text().strip(),
+            'specification': self.specification_input.text().strip()
         }
 
     @staticmethod
@@ -129,15 +134,19 @@ class UpdateInventoryDialog(BaseInventoryDialog):
         self.set_inventory_info()
 
     def set_inventory_info(self):
-        url = URL + f'/inventory/{self.cargo_id}'
-        # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if response['success']:
-            data = response['inventory']
-            self.cargo_name_input.setText(data['cargo_name'])
-            self.model_input.setText(data['model'])
-            self.category_combo.setCurrentText(data['categories'])
-            self.count_input.setText(str(data['count']))
-            self.count_input.setReadOnly(True)
-            self.price_input.setText(str(data['price']))
-            self.price_input.setReadOnly(True)
+        try:
+            url = URL + f'/inventory/{self.cargo_id}'
+            # response = APIClient.get_request(url)
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response['success']:
+                data = response['inventory']
+                self.cargo_name_input.setText(data['cargo_name'])
+                self.model_input.setText(data['model'])
+                self.category_combo.setCurrentText(data['categories'])
+                self.count_input.setText(str(data['count']))
+                self.count_input.setReadOnly(True)
+                self.price_input.setText(str(data['price']))
+                self.price_input.setReadOnly(True)
+                self.specification_input.setText(data['specification'])
+        except Exception as e:
+            error_logger.error(f'inventoryDialog.set_inventory_info: {e}')

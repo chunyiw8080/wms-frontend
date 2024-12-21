@@ -1,2 +1,4 @@
 /QFluentWigetsDemo/
 /.venv/
+/build/
+/dist/

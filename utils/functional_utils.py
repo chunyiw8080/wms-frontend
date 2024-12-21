@@ -1,4 +1,6 @@
 from datetime import datetime
+from config import SALT
+import hashlib
 
 
 def convert_date_to_chinese(date_str):
@@ -25,6 +27,15 @@ def convert_date_to_chinese(date_str):
     # {week_chinese}
     return chinese_date
 
+
 def get_keys_by_value(d, target_value):
     return [k for k, v in d.items() if v == target_value]
 
+
+def hash_password(password: str) -> str:
+    try:
+        salted_passoword = password + SALT
+        hashed_password = hashlib.sha256(salted_passoword.encode('utf-8')).hexdigest()
+        return hashed_password
+    except Exception as e:
+        print(e)

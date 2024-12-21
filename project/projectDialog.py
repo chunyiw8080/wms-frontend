@@ -3,6 +3,10 @@ from qfluentwidgets import MessageBoxBase, SubtitleLabel, LineEdit, StrongBodyLa
 from config import URL
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
+
 
 class BaseProjectDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
@@ -47,13 +51,16 @@ class UpdateProjectDialog(BaseProjectDialog):
         self.set_project_info()
 
     def set_project_info(self):
-        url = URL + f'/project/search?name={self.project_name}'
-        # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if response.get('success') is True:
-            data = response['data']
-            print(data[0].get('project_name'))
-            self.project_name_input.setText(data[0].get('project_name'))
+        try:
+            url = URL + f'/project/search?name={self.project_name}'
+            # response = APIClient.get_request(url)
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response.get('success') is True:
+                data = response['data']
+                print(data[0].get('project_name'))
+                self.project_name_input.setText(data[0].get('project_name'))
+        except Exception as e:
+            error_logger.error(f'projectDialog.set_project_info: {e}')
 
     def get_project_info(self):
         return {

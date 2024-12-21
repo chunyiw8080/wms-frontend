@@ -3,7 +3,12 @@ from PyQt6.QtWidgets import QGridLayout
 from qfluentwidgets import MessageBoxBase, SubtitleLabel, LineEdit, ComboBox, PasswordLineEdit, StrongBodyLabel, InfoBar
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
+from utils.functional_utils import hash_password
 from config import URL
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
+
 
 class BaseUserDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
@@ -28,7 +33,7 @@ class BaseUserDialog(MessageBoxBase):
         self.status_combo = ComboBox(self)
         self.status_combo.addItems(['启用', '停用'])
         self.privilege_combo = ComboBox(self)
-        self.privilege_combo.addItems(['A', 'B', 'C', 'D'])
+        self.privilege_combo.addItems(['S', 'F', 'W'])
         self.password_input = PasswordLineEdit(self)
         self.verify_password_input = PasswordLineEdit(self)
 
@@ -44,8 +49,8 @@ class BaseUserDialog(MessageBoxBase):
 
         for row, (label_text, widget) in enumerate(fields):
             label = StrongBodyLabel(label_text, self)
-            grid_layout.addWidget(label, row, 0) #每行的第一列
-            grid_layout.addWidget(widget, row, 1) # 每行的第二列
+            grid_layout.addWidget(label, row, 0)  #每行的第一列
+            grid_layout.addWidget(widget, row, 1)  # 每行的第二列
 
         # 设置列拉伸
         grid_layout.setColumnStretch(1, 1)
@@ -55,7 +60,8 @@ class BaseUserDialog(MessageBoxBase):
         self.yesButton.setText('确定')
         self.cancelButton.setText('取消')
 
-        for widget in [self.user_id_input, self.username_input, self.employee_combo, self.status_combo, self.privilege_combo, self.password_input, self.verify_password_input]:
+        for widget in [self.user_id_input, self.username_input, self.employee_combo, self.status_combo,
+                       self.privilege_combo, self.password_input, self.verify_password_input]:
             widget.setMinimumWidth(200)
 
         # 设置光标默认定位到id输入框
@@ -63,17 +69,19 @@ class BaseUserDialog(MessageBoxBase):
 
     def load_employees(self):
         url = URL + '/employees/all'
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
 
-        employees = []
-        if isinstance(response, (dict, list)):  # 有效 JSON
-            if response.get('success') is True:  # 有数据
-                data = response.get('data')
-                for employee_info in data:
-                    employee_name = employee_info.get('employee_name')
-                    employees.append(employee_name)
-        print(employees)
-        return employees
+            employees = []
+            if isinstance(response, (dict, list)):  # 有效 JSON
+                if response.get('success') is True:  # 有数据
+                    data = response.get('data')
+                    for employee_info in data:
+                        employee_name = employee_info.get('employee_name')
+                        employees.append(employee_name)
+            return employees
+        except Exception as e:
+            error_logger.error(f'userDialog.load_employees: {e}')
 
     def _validateInput(self) -> list:
         username = self.username_input.text().strip()
@@ -107,18 +115,21 @@ class BaseUserDialog(MessageBoxBase):
             super().accept()
 
     def get_user_info(self):
+        password = self.password_input.text().strip()
         return {
             "username": self.username_input.text().strip(),
             "employee_name": self.employee_combo.currentText(),
             "status": 1 if self.status_combo.currentText() == '启用' else 0,
             "privilege": self.privilege_combo.currentText(),
-            "password": self.password_input.text().strip(),
+            "password": hash_password(password)
         }
+
 
 class AddUserDialog(BaseUserDialog):
     def __init__(self, parent=None):
         super().__init__('新增用户', parent)
         self.yesButton.setText('添加')
+
 
 class UpdateUserDialog(BaseUserDialog):
     def __init__(self, user_id, parent=None):
@@ -143,7 +154,7 @@ class UpdateUserDialog(BaseUserDialog):
                 self.password_input.setText(None)
                 self.verify_password_input.setText(None)
         except Exception as e:
-            print(e)
+            error_logger.error(f'userDialog.set_user_info: {e}')
 
     def _get_employee_name(self, employee_id):
         url = URL + f'/employees/{employee_id}'
@@ -156,5 +167,5 @@ class UpdateUserDialog(BaseUserDialog):
             else:
                 return None
         except Exception as e:
-            print(e)
+            error_logger.error(f'userDialog._get_employee_name: {e}')
             return None

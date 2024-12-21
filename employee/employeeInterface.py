@@ -11,6 +11,9 @@ from config import URL
 from utils.ui_components import create_btn_widget
 from employee.employeeDialog import AddEmployeeDialog, UpdateEmployeeDialog
 from utils.worker import Worker
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 
 class EmployeeInterface(QWidget):
@@ -89,17 +92,20 @@ class EmployeeInterface(QWidget):
     def load_data(self):
         url = URL + '/employees/all'
         # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if isinstance(response, (dict, list)):  # 有效 JSON
-            if response.get('success') is True:  # 有数据
-                self.employees = response.get('data')
-                self.populate_table()
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if isinstance(response, (dict, list)):  # 有效 JSON
+                if response.get('success') is True:  # 有数据
+                    self.employees = response.get('data')
+                    self.populate_table()
+                else:
+                    InfoBar.warning(title='获取数据失败', content=response.get('message'), parent=self, duration=5000)
+            elif isinstance(response, str):  # 错误信息
+                InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=10000)
             else:
-                InfoBar.warning(title='获取数据失败', content=response.get('message'), parent=self, duration=5000)
-        elif isinstance(response, str):  # 错误信息
-            InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=10000)
-        else:
-            print("Unexpected result:", response)
+                InfoBar.error(title='结果异常', content=response, parent=self, duration=10000)
+        except Exception as e:
+            error_logger.error(f'EmployeeInterface.load_data(): {str(e)}')
 
     def populate_table(self):
         """生成表格, 遍历从后端获取的数据并逐行填入到表格中"""
@@ -132,16 +138,19 @@ class EmployeeInterface(QWidget):
             self.populate_table()
         else:
             url = URL + f'/employees/search?condition={condition}'
-            response = Worker.unpack_thread_queue(APIClient.get_request, url)
-            if response.get('success') is True:
-                self.employees = response.get('data')
-                self.populate_table()
-            elif response.get('success') is False:
-                InfoBar.warning(title='搜索失败', content=response.get('message'), parent=self, duration=4000)
-                return
-            else:
-                InfoBar.error(title='操作失败', content=response.get('error'), parent=self, duration=4000)
-                return
+            try:
+                response = Worker.unpack_thread_queue(APIClient.get_request, url)
+                if response.get('success') is True:
+                    self.employees = response.get('data')
+                    self.populate_table()
+                elif response.get('success') is False:
+                    InfoBar.warning(title='搜索失败', content=response.get('message'), parent=self, duration=4000)
+                    return
+                else:
+                    InfoBar.error(title='操作失败', content=response.get('error'), parent=self, duration=4000)
+                    return
+            except Exception as e:
+                error_logger.error(f'EmployeeInterface.search_employees(): {str(e)}')
 
     def add_employee(self):
         url = URL + f'/employees/create'
@@ -159,7 +168,7 @@ class EmployeeInterface(QWidget):
                 elif response.get('error') is not None:
                     InfoBar.error(title='操作失败', content=response.get('error'), parent=self, duration=5000)
         except Exception as e:
-            print(e)
+            error_logger.error(f'EmployeeInterface.add_employee(): {str(e)}')
 
     def update_employee(self, employee_id):
         url = URL + f'/employees/update/{employee_id}'
@@ -167,10 +176,7 @@ class EmployeeInterface(QWidget):
             dialog = UpdateEmployeeDialog(employee_id, self)
             if dialog.exec():
                 new_employee_info = dialog.get_employee_info()
-                print(f'new_employee_info: {new_employee_info}')
-                print(f'type of new_employee_info: {type(new_employee_info)}')
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, new_employee_info)
-                print(response)
                 if response.get('success') is True:
                     InfoBar.success(title='操作成功', content=response['message'], parent=self, duration=5000)
                     self.load_data()
@@ -183,14 +189,13 @@ class EmployeeInterface(QWidget):
                     InfoBar.error(title='操作失败', content=response['error'], parent=self, duration=5000)
                     return
         except Exception as e:
-            print(e)
+            error_logger.error(f'EmployeeInterface.update_employee(): {str(e)}')
 
     def delete_employees(self):
         url = URL + '/employees/delete'
         selected_ids = self.get_selected_employee_ids()
         try:
             response = Worker.unpack_thread_queue(APIClient.delete_request, url, selected_ids)
-            print(response)
             if response.get('success') is True:
                 self.load_data()
                 self.populate_table()
@@ -203,7 +208,7 @@ class EmployeeInterface(QWidget):
                 InfoBar.error(title='删除失败', content=response.get('error'), parent=self, duration=5000)
                 return
         except Exception as e:
-            print(e)
+            error_logger.error(f'EmployeeInterface.delete_employee(): {str(e)}')
 
     def get_selected_employee_ids(self) -> list:
         """获取并返回多选框被选中的数据的cargo_id"""

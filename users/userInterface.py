@@ -2,8 +2,8 @@ import sys
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QHeaderView, QApplication, QTableWidgetItem
-from qfluentwidgets import CardWidget, StrongBodyLabel, LineEdit, PushButton, ComboBox, setCustomStyleSheet, SmoothMode, \
-    TableWidget, CheckBox, InfoBar
+from qfluentwidgets import CardWidget, StrongBodyLabel, LineEdit, PushButton, setCustomStyleSheet, SmoothMode, \
+    TableWidget, InfoBar
 
 from utils.custom_styles import ADD_BUTTON_STYLE
 from config import URL
@@ -11,7 +11,11 @@ from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
 from utils.ui_components import create_btn_widget
 from utils.functional_utils import convert_date_to_chinese
+from utils.app_logger import get_logger
 from users.userDialog import AddUserDialog, UpdateUserDialog
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
+
 
 class UserInterface(QWidget):
     def __init__(self):
@@ -106,6 +110,7 @@ class UserInterface(QWidget):
             self.populate_table()
         except Exception as e:
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'userInterface.load_data: {str(e)}')
 
     def update_user(self, user_id):
         try:
@@ -113,9 +118,9 @@ class UserInterface(QWidget):
             if dialog.exec():
                 url = URL + f'/users/update/{user_id}'
                 user_info = dialog.get_user_info()
-                # response = APIClient.post_request(url, user_info)
+
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, user_info)
-                # print(response)
+
                 if response.get('success') is True:
                     InfoBar.success(title='更新成功', content='已完成用户资料更新', parent=self, duration=5000)
                     self.load_data()
@@ -124,8 +129,8 @@ class UserInterface(QWidget):
                 else:
                     InfoBar.error(title='系统错误', content=response.get('error'), parent=self, duration=5000)
         except Exception as e:
-            # print(e)
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'userInterface.update_user: {str(e)}')
 
     def add_user(self):
         dialog = AddUserDialog(self)
@@ -136,7 +141,8 @@ class UserInterface(QWidget):
                 # response = APIClient.post_request(url, user_info)
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, user_info)
                 if response.get('success') is True:
-                    InfoBar.success(title='用户创建成功', content=f'{user_info.get('employee_name')}已被成功创建', parent=self, duration=5000)
+                    InfoBar.success(title='用户创建成功', content=f'{user_info.get('employee_name')}已被成功创建',
+                                    parent=self, duration=5000)
                     self.load_data()
                 elif response.get('success') is False:
                     InfoBar.error(title='用户创建失败', content='未能成功创建用户', parent=self, duration=5000)
@@ -144,14 +150,16 @@ class UserInterface(QWidget):
                     InfoBar.error(title='用户创建失败', content=response.get('error'), parent=self, duration=5000)
         except Exception as e:
             InfoBar.error(title='用户创建失败', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'userInterface.add_user: {str(e)}')
+
     def search_user(self):
         condition = self.search_input.text()
         try:
             if condition:
                 url = URL + f'/users/search?condition={condition}'
-                # response = APIClient.get_request(url)
+
                 response = Worker.unpack_thread_queue(APIClient.get_request, url)
-                # print(response)
+
                 if response.get('success') is True:
                     self.users = response.get('data')
                     self.populate_table()
@@ -162,7 +170,7 @@ class UserInterface(QWidget):
             else:
                 self.load_data()
         except Exception as e:
-            print(e)
+            error_logger.error(f'userInterface.search_user: {str(e)}')
 
 
 if __name__ == '__main__':

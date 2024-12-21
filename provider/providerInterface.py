@@ -10,7 +10,9 @@ from utils.custom_styles import ADD_BUTTON_STYLE
 from config import URL
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
+from utils.app_logger import get_logger
 
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class ProviderInterface(QWidget):
     def __init__(self):
@@ -106,11 +108,14 @@ class ProviderInterface(QWidget):
     def load_data(self):
         url = URL + '/providers/all'
         # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if response.get('success') is True:
-            data = response['data']
-            self.providers = [ item for item in data if item['provider_name'] != 'null']
-            self.populate_table()
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response.get('success') is True:
+                data = response['data']
+                self.providers = [ item for item in data if item['provider_name'] != 'null']
+                self.populate_table()
+        except Exception as e:
+            error_logger.error(f'providerInterface.load_data: {e}')
 
     def search_project_by_name(self):
         if self.search_input.text() == '':
@@ -125,15 +130,14 @@ class ProviderInterface(QWidget):
             if response.get('success') is True:
                 data = response['data']
                 self.providers = [data] if isinstance(data, str) else data
-                print(self.providers)
                 self.populate_table()
             elif response.get('error') is not None:
                 InfoBar.error(title='查询失败', content=response.get('error'), parent=self, duration=5000)
             else:
                 InfoBar.error(title='查询失败', content='没有对应的数据', parent=self, duration=5000)
         except Exception as e:
-            print(e)
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'providerInterface.search_project_by_name: {e}')
 
     def exec_operations(self):
         index = self.operations_combo.currentIndex()
@@ -152,16 +156,18 @@ class ProviderInterface(QWidget):
             provider_name = dialog.get_provider_info()
             url = URL + '/providers/create'
             data = {"provider_name": provider_name}
-            # response = APIClient.post_request(url, data)
-            response = Worker.unpack_thread_queue(APIClient.post_request, url, data)
-            if response.get('success') is True:
-                InfoBar.success(title='操作成功', content=response.get('message'), parent=self)
-                self.load_data()
-                self.populate_table()
-            elif response.get('error') is not None:
-                InfoBar.error(title='操作成功', content=response.get('error'), parent=self)
-            else:
-                InfoBar.warning(title='操作失败', content=response.get('message'), parent=self)
+            try:
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, data)
+                if response.get('success') is True:
+                    InfoBar.success(title='操作成功', content=response.get('message'), parent=self)
+                    self.load_data()
+                    self.populate_table()
+                elif response.get('error') is not None:
+                    InfoBar.error(title='操作成功', content=response.get('error'), parent=self)
+                else:
+                    InfoBar.warning(title='操作失败', content=response.get('message'), parent=self)
+            except Exception as e:
+                error_logger.error(f'providerInterface.add_project: {e}')
 
     def delete_project(self):
         pass
@@ -184,6 +190,7 @@ class ProviderInterface(QWidget):
                     InfoBar.error(title='系统错误', content=response.get('error'), parent=self, duration=5000)
         except Exception as e:
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'providerInterface.edit_project: {e}')
 
     def get_selected_providers(self):
         """获取并返回多选框被选中的数据的cargo_id"""

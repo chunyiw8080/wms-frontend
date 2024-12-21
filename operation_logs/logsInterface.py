@@ -6,6 +6,9 @@ from qfluentwidgets import CardWidget, PlainTextEdit, ComboBox, StrongBodyLabel,
 from utils.worker import Worker
 from backendRequests.jsonRequests import APIClient
 from config import URL
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 
 class LogsInterface(QWidget):
@@ -51,12 +54,22 @@ class LogsInterface(QWidget):
 
     def load_log_files(self):
         url = URL + '/logs/getfiles'
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        files = response.get('data')
-        return files
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response.get('success') is True:
+                files = response.get('data')
+                return files
+            else:
+                InfoBar.error(title='读取日志列表失败', content='无法读取日志列表', parent=self, duration=5000)
+                return None
+        except Exception as e:
+            InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'logsInterface.load_log_files: {str(e)}')
 
     def load_log_content(self):
         filename = self.files_combo.currentText()
+        if filename.strip() is None:
+            return
         url = URL + f'/logs/content/{filename}'
         try:
             response = Worker.unpack_thread_queue(APIClient.get_request, url)
@@ -68,7 +81,8 @@ class LogsInterface(QWidget):
             else:
                 InfoBar.error(title='加载失败', content='日志内容加载失败', parent=self, duration=5000)
         except Exception as e:
-            print(e)
+            InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'logsInterface.load_log_content: {str(e)}')
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

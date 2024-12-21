@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['windows\\main.py'],
-    pathex=['backendRequests', 'employee', 'history', 'inventory', 'operation_logs', 'orders', 'project', 'provider', 'users', 'utils', 'windows', 'config'],
+    ['app.py'],
+    pathex=[],
     binaries=[],
-    datas=[('resources/icons/*.svg', 'resources/icons'), ('resources/images/*.jpg', 'resources/images'), ('resources/logo/*.png', 'resources/logo')],
+    datas=[('resources', 'resources')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='main',
+    name='app',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['resources\\logo\\logo.png'],
 )

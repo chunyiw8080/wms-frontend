@@ -11,9 +11,11 @@ from backendRequests.jsonRequests import APIClient
 from inventory.inventoryDialog import AddInventoryDialog, UpdateInventoryDialog
 from utils.db_utils import load_categories
 from utils.ui_components import create_btn_widget
-from utils.token_utils import decode_token, get_privilege
+from utils.token_utils import get_privilege
 from utils.worker import Worker
+from utils.app_logger import get_logger
 
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class InventoryInterface(QWidget):
     def __init__(self):
@@ -36,11 +38,9 @@ class InventoryInterface(QWidget):
         self.load_data()
 
     def setup_ui(self):
-        # token = APIClient.jwt_token
-        # payload = decode_token(token)
         self.permission = get_privilege(APIClient.jwt_token)
-        self.enm_header = ['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'total_price'] if self.permission != 'W' else ['cargo_id', 'cargo_name', 'model', 'categories', 'count']
-        self.column_count = 9 if self.permission != 'W' else 6
+        self.enm_header = ['cargo_id', 'cargo_name', 'model', 'categories', 'count', 'price', 'specification', 'total_price'] if self.permission != 'W' else ['cargo_id', 'cargo_name', 'model', 'categories', 'count']
+        self.column_count = 10 if self.permission != 'W' else 7
 
         # 父布局 - 垂直布局
         layout = QVBoxLayout(self)
@@ -109,10 +109,10 @@ class InventoryInterface(QWidget):
         self.table_widget.setColumnCount(self.column_count)
         if self.permission != 'W':
             self.table_widget.setHorizontalHeaderLabels(
-                ["", "货品编号", "货品名称", "型号", "类别", "数量", "单价", "总价", "操作"])
+                ["", "货品编号", "货品名称", "型号", "类别", "数量", "单价", "规格", "总价", "操作"])
         else:
             self.table_widget.setHorizontalHeaderLabels(
-                ["", "货品编号", "货品名称", "型号", "类别", "数量"])
+                ["", "货品编号", "货品名称", "型号", "类别", "数量", "规格"])
 
         # self.custom_header = CustomHeaderView(orientation=Qt.Orientation.Horizontal, parent=self.table_widget)
         # self.table_widget.setHorizontalHeader(self.custom_header)
@@ -161,14 +161,16 @@ class InventoryInterface(QWidget):
 
     def get_count(self):
         """获取数据的总量或者分类数据的总量，用于设置分页控制器"""
-        url = URL + '/inventory/count'
-        if self.categoriesComboBox.currentIndex() != 0:
-            # 当分类选框有实际选中时，构造带参的url参数为category=被选中的分类Text
-            url += '?category=' + self.categoriesComboBox.currentText()
-
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        count = response['count']
-        return count
+        try:
+            url = URL + '/inventory/count'
+            if self.categoriesComboBox.currentIndex() != 0:
+                # 当分类选框有实际选中时，构造带参的url参数为category=被选中的分类Text
+                url += '?category=' + self.categoriesComboBox.currentText()
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            count = response['count']
+            return count
+        except Exception as e:
+            error_logger.error(f'inventoryInterface.get_count: {e}')
 
     def load_data(self):
         try:
@@ -177,7 +179,10 @@ class InventoryInterface(QWidget):
             if self.categoriesComboBox.currentIndex() == 0:
                 # 分类选框为全部类别时的分页控制器
                 count = self.get_count()
-                self.total_pages = math.ceil(count / self.per_page)
+                if count != 0:
+                    self.total_pages = math.ceil(count / self.per_page)
+                else:
+                    self.total_pages = 1
                 self.update_pagination_controls()
                 result = Worker.unpack_thread_queue(APIClient.get_request, url)
             else:
@@ -193,11 +198,11 @@ class InventoryInterface(QWidget):
                 else:
                     InfoBar.warning(title='获取数据失败', content=result['message'], parent=self, duration=5000)
             elif isinstance(result, str):  # 错误信息
-                InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=10000)
+                InfoBar.error(title='服务器状态异常', content='无法连接到后端服务器', parent=self, duration=5000)
             else:
-                print("Unexpected result:", result)
+                InfoBar.error(title='数据类型异常', content=result, parent=self, duration=5000)
         except Exception as e:
-            print(e)
+            error_logger.error(f'inventoryInterface.load_data: {e}')
 
     def update_pagination_controls(self):
         # 判断分页是否有数据，如果有显示当前是第几页，一共几页，否则显示0页
@@ -221,9 +226,6 @@ class InventoryInterface(QWidget):
             self.setup_table_row(row, inventory_info)
 
     def setup_table_row(self, row: int, inventory_info: dict):
-        # token = APIClient.jwt_token
-        # payload = decode_token(token)
-        # privilege = payload.get('permissions')
         # 将多选框绘制到每行的首列
         checkbox = CheckBox()
         self.table_widget.setCellWidget(row, 0, checkbox)
@@ -258,6 +260,7 @@ class InventoryInterface(QWidget):
                     InfoBar.error(title='操作失败', content=response.get('message'), parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title='操作失败', content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.update_inventory: {str(e)}')
 
     def add_inventory(self):
         """添加库存记录"""
@@ -266,9 +269,7 @@ class InventoryInterface(QWidget):
             if dialog.exec():
                 inventory_info = dialog.get_inventory_info()
                 url = f'{URL}/inventory/create'
-                # response = APIClient.post_request('http://127.0.0.1:5000/inventory/create', inventory_info)
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, inventory_info)
-                # print(f'response: {response}')
                 if response.get('success'):
                     InfoBar.success(title='操作成功', content=response.get('message'), parent=self, duration=4000)
                     self.load_data()
@@ -277,6 +278,7 @@ class InventoryInterface(QWidget):
                     InfoBar.error(title='操作失败', content=response.get('message'), parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title='操作失败', content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.add_inventory: {str(e)}')
 
     def batch_delete_inventory(self):
         """批量删除"""
@@ -299,6 +301,7 @@ class InventoryInterface(QWidget):
                         InfoBar.error(title='操作失败', content=response.get('error'), parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title='操作失败', content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.batch_delete_inventory: {str(e)}')
 
 
     def get_selected_inventory_ids(self) -> list:
@@ -342,6 +345,7 @@ class InventoryInterface(QWidget):
                     self.categoriesComboBox.setCurrentIndex(0)
         except Exception as e:
             InfoBar.error(title='操作失败', content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.search_inventories: {str(e)}')
 
     def on_category_selected(self):
         """当分类栏中有项目被选中时的操作"""
@@ -368,6 +372,7 @@ class InventoryInterface(QWidget):
                     InfoBar.warning(title='操作失败', content=response.get('message'), parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title='操作失败', content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.search_inventories: {str(e)}')
 
     def load_prev_page(self):
         if self.current_page > 1:
@@ -390,9 +395,9 @@ class InventoryInterface(QWidget):
             w = MessageBox("确认导出", f"是否将 {category} 的全部条目导出为excel文件?", self)
             if w.exec():
                 if self.categoriesComboBox.currentIndex() == 0:
-                    url = f"http://127.0.0.1:5000/inventory/all"
+                    url = URL + '/inventory/all'
                 else:
-                    url = f"http://127.0.0.1:5000/inventory/all?category={category}"
+                    url = f'{URL}/inventory/all?category={category}'
                 # response = APIClient.get_request(url)
                 response = Worker.unpack_thread_queue(APIClient.get_request, url)
                 if response.get('error'):
@@ -405,12 +410,11 @@ class InventoryInterface(QWidget):
                     exported_data = response.get('data')
                     date = datetime.today().strftime('%Y-%m-%d')
                     filename = f"{category}库存记录-{date}"
-                    # print(exported_data)
                     wb = openpyxl.Workbook()
                     ws = wb.active
                     ws.title = filename
                     # 写入表头
-                    headers = ["货品编号", "货品名称", "型号", "类别", "数量", "单价", "总价"]
+                    headers = ["货品编号", "货品名称", "型号", "类别", "数量", "单价", "规格", "总价"]
                     ws.append(headers)
                     # 写入库存信息
                     for inventory in exported_data:
@@ -421,6 +425,7 @@ class InventoryInterface(QWidget):
                             inventory['categories'],
                             inventory['count'],
                             inventory['price'],
+                            inventory['specification'],
                             inventory['total_price']
                         ]
                         ws.append(row)
@@ -432,6 +437,7 @@ class InventoryInterface(QWidget):
                         InfoBar.warning(title="操作失败", content="操作被终止", parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title="操作失败", content=str(e), parent=self, duration=4000)
+            error_logger.error(f'inventoryInterface.export_to_excel: {str(e)}')
 
     def import_from_excel(self):
         try:
@@ -442,7 +448,7 @@ class InventoryInterface(QWidget):
             else:
                 wb = openpyxl.load_workbook(filename=file_path)
                 ws = wb.active
-                expected_header = ["货品编号", "货品名称", "型号", "类别", "数量", "单价", "总价"]
+                expected_header = ["货品编号", "货品名称", "型号", "类别", "数量", "单价", "规格", "总价"]
                 headers = [ cell.value for cell in ws[1]]
                 if headers != expected_header:
                     InfoBar.error(title="操作失败", content="表头与预期不符", parent=self, duration=4000)
@@ -453,7 +459,8 @@ class InventoryInterface(QWidget):
                     skipped_row = []
                     dataset = []
                     for row in ws.iter_rows(min_row=2, values_only=True):
-                        cargo_id, cargo_name, model, categories, count, price, total_price = row
+                        print(row)
+                        cargo_id, cargo_name, model, categories, count, price, specification, total_price = row
                         if not all([cargo_name, model, categories, count, price]):
                             skipped_count += 1
                             skipped_row.append(f"{skipped_count}. {cargo_name} - {model}\n")
@@ -464,14 +471,14 @@ class InventoryInterface(QWidget):
                                 "categories": categories,
                                 "count": count,
                                 "price": price,
+                                "specification": specification
                             }
                             dataset.append(info)
                     url = f"{URL}/inventory/import"
-                    json = {
+                    posted_data = {
                         "dataset": dataset
                     }
-                    # response = APIClient.post_request(url, json)
-                    response = Worker.unpack_thread_queue(APIClient.post_request, url, json)
+                    response = Worker.unpack_thread_queue(APIClient.post_request, url, posted_data)
                     res = response.get('success')
                     skipped_row_backend = response.get('skipped_row')
                     skipped_row.append(skipped_row_backend)
@@ -486,6 +493,7 @@ class InventoryInterface(QWidget):
                         self.populate_table()
         except Exception as e:
             InfoBar.error(title="操作失败", content=str(e), parent=self, duration=5000)
+            error_logger.error(f'inventoryInterface.import_from_excel: {str(e)}')
 
 
 if __name__ == '__main__':

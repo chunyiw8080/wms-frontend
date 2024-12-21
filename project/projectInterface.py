@@ -10,6 +10,9 @@ from utils.custom_styles import ADD_BUTTON_STYLE
 from config import URL
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class ProjectInterface(QWidget):
     def __init__(self):
@@ -105,11 +108,14 @@ class ProjectInterface(QWidget):
     def load_data(self):
         url = URL + '/project/all'
         # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if response.get('success') is True:
-            data = response['data']
-            self.projects = [ item for item in data if item['project_name'] != 'null']
-            self.populate_table()
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response.get('success') is True:
+                data = response['data']
+                self.projects = [ item for item in data if item['project_name'] != 'null']
+                self.populate_table()
+        except Exception as e:
+            error_logger.error(f'projectInterface.load_data: {str(e)}')
 
     def search_project_by_name(self):
         if self.search_input.text() == '':
@@ -132,8 +138,8 @@ class ProjectInterface(QWidget):
             else:
                 InfoBar.error(title='查询失败', content='没有对应的数据', parent=self, duration=5000)
         except Exception as e:
-            print(e)
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'projectInterface.search_project_by_name: {str(e)}')
 
     def exec_operations(self):
         index = self.operations_combo.currentIndex()
@@ -153,15 +159,18 @@ class ProjectInterface(QWidget):
             url = URL + '/project/create'
             data = {"project_name": project_name}
             # response = APIClient.post_request(url, data)
-            response = Worker.unpack_thread_queue(APIClient.post_request, url, data)
-            if response.get('success') is True:
-                InfoBar.success(title='操作成功', content=response.get('message'), parent=self)
-                self.load_data()
-                self.populate_table()
-            elif response.get('error') is not None:
-                InfoBar.error(title='操作成功', content=response.get('error'), parent=self)
-            else:
-                InfoBar.warning(title='操作失败', content=response.get('message'), parent=self)
+            try:
+                response = Worker.unpack_thread_queue(APIClient.post_request, url, data)
+                if response.get('success') is True:
+                    InfoBar.success(title='操作成功', content=response.get('message'), parent=self)
+                    self.load_data()
+                    self.populate_table()
+                elif response.get('error') is not None:
+                    InfoBar.error(title='操作成功', content=response.get('error'), parent=self)
+                else:
+                    InfoBar.warning(title='操作失败', content=response.get('message'), parent=self)
+            except Exception as e:
+                error_logger.error(f'projectInterface.add_project: {str(e)}')
 
     def delete_project(self):
         pass
@@ -184,6 +193,7 @@ class ProjectInterface(QWidget):
                     InfoBar.error(title='系统错误', content=response.get('error'), parent=self, duration=5000)
         except Exception as e:
             InfoBar.error(title='系统错误', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'projectInterface.edit_project: {str(e)}')
 
     def get_selected_project(self):
         """获取并返回多选框被选中的数据的cargo_id"""

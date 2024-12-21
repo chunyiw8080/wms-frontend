@@ -1,16 +1,15 @@
 import sys
-import threading
-from datetime import datetime
 
 import openpyxl
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QHeaderView, QApplication, QTableWidgetItem, QFileDialog
 from qfluentwidgets import CardWidget, StrongBodyLabel, TableWidget, SmoothMode, LineEdit, PushButton, InfoBar, ComboBox
-from utils.custom_styles import ADD_BUTTON_STYLE
 from backendRequests.jsonRequests import APIClient
+from utils.app_logger import get_logger
 from utils.worker import Worker
 from config import URL
 
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class HistoryInterface(QWidget):
     def __init__(self):
@@ -68,9 +67,9 @@ class HistoryInterface(QWidget):
         self.table_widget.scrollDelagate.verticalSmoothScroll.setSmoothMode(SmoothMode.NO_SMOOTH)
 
         # 设置表头
-        self.table_widget.setColumnCount(10)
+        self.table_widget.setColumnCount(11)
         self.table_widget.setHorizontalHeaderLabels(
-            ['id', '货品名', '型号', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价'])
+            ['id', '货品名', '型号', '规格', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价'])
         layout.addWidget(self.table_widget)
 
         self.setStyleSheet("HistoryInterface {background-color:white;}")
@@ -91,13 +90,16 @@ class HistoryInterface(QWidget):
             InfoBar.warning(title='无效输入', content='年份或月份值无效', parent=self, duration=5000)
         else:
             self.record_date = f'{year}-{month}'
-            url = f'{URL}/history/search?year={year}&month={month}'
-            response = Worker.unpack_thread_queue(APIClient.get_request, url)
-            if response.get('success') is True:
-                self.records = response.get('data')
-                self.populate_table()
-            else:
-                InfoBar.warning(title='没有数据', content='没有对应时间段的历史数据', parent=self, duration=5000)
+            try:
+                url = f'{URL}/history/search?year={year}&month={month}'
+                response = Worker.unpack_thread_queue(APIClient.get_request, url)
+                if response.get('success') is True:
+                    self.records = response.get('data')
+                    self.populate_table()
+                else:
+                    InfoBar.warning(title='没有数据', content='没有对应时间段的历史数据', parent=self, duration=5000)
+            except Exception as e:
+                error_logger.error(f'historyInterface.search_data_by_date: {e}')
 
     def populate_table(self):
         """生成表格, 遍历从后端获取的数据并逐行填入到表格中"""
@@ -106,7 +108,7 @@ class HistoryInterface(QWidget):
             self.setup_table_row(row, record_info)
 
     def setup_table_row(self, row: int, record_info: dict):
-        data_keys = ['id', 'cargo_name', 'model', 'categories', 'starting_price', 'starting_count',
+        data_keys = ['id', 'cargo_name', 'model', 'specification', 'categories', 'starting_price', 'starting_count',
                      'starting_total_price', 'closing_price', 'closing_count', 'closing_total_price']
         # 将多选框绘制到每行的首列
         for col, key in enumerate(data_keys):
@@ -126,7 +128,7 @@ class HistoryInterface(QWidget):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = filename
-            headers = ['id', '年', '月', '货品名', '型号', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价']
+            headers = ['id', '年', '月', '货品名', '型号', '规格', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价']
             ws.append(headers)
             for record in self.records:
                 row = [
@@ -135,6 +137,7 @@ class HistoryInterface(QWidget):
                     record['month'],
                     record['cargo_name'],
                     record['model'],
+                    record['specification'],
                     record['categories'],
                     record['starting_price'],
                     record['starting_count'],
@@ -152,6 +155,7 @@ class HistoryInterface(QWidget):
                 InfoBar.warning(title="操作失败", content="操作被终止", parent=self, duration=4000)
         except Exception as e:
             InfoBar.error(title="操作失败", content=str(e), parent=self, duration=4000)
+            error_logger.error(f'historyInterface.export_to_excel: {e}')
 
     def import_from_excel(self):
         try:
@@ -162,8 +166,9 @@ class HistoryInterface(QWidget):
             else:
                 wb = openpyxl.load_workbook(filename=file_path)
                 ws = wb.active
-                expected_header = ['id', '年', '月', '货品名', '型号', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价']
+                expected_header = ['id', '年', '月', '货品名', '型号', '规格', '分类', '期初单价', '期初数量', '期初总价', '期末单价', '期末数量', '期末总价']
                 headers = [cell.value for cell in ws[1]]
+                # print(headers)
                 if headers != expected_header:
                     InfoBar.error(title="操作失败", content="表头与预期不符", parent=self, duration=4000)
                     return
@@ -171,8 +176,8 @@ class HistoryInterface(QWidget):
                     skipped_num = 0
                     dataset = []
                     for row in ws.iter_rows(min_row=2, values_only=True):
-                        record_id, year, month, cargo_name, model, categories, starting_price, starting_count, starting_total_price, closing_price, closing_count, closing_total_price = row
-                        if not all([year, month, cargo_name, model, categories, starting_price, starting_count, starting_total_price, closing_price, closing_count, closing_total_price]):
+                        record_id, year, month, cargo_name, model, specification, categories, starting_price, starting_count, starting_total_price, closing_price, closing_count, closing_total_price = row
+                        if not all([year, month, cargo_name, model, specification, categories, starting_price, starting_count, starting_total_price, closing_price, closing_count, closing_total_price]):
                             skipped_num += 1
                         else:
                             info = {
@@ -180,6 +185,7 @@ class HistoryInterface(QWidget):
                                 "month": month,
                                 "cargo_name": cargo_name,
                                 "model": model,
+                                "specification": specification,
                                 "categories": categories,
                                 "starting_price": starting_price,
                                 "starting_count": starting_count,
@@ -202,6 +208,7 @@ class HistoryInterface(QWidget):
                                         duration=5000)
         except Exception as e:
             InfoBar.success(title='导入失败', content=str(e), parent=self, duration=5000)
+            error_logger.error(f'historyInterface.import_from_excel: {e}')
 
     @staticmethod
     def verify_date_input(year: str, month: str):

@@ -4,6 +4,9 @@ from qfluentwidgets import MessageBoxBase, LineEdit, ComboBox, StrongBodyLabel, 
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
 from config import URL
+from utils.app_logger import get_logger
+
+error_logger = get_logger(logger_name='error_logger', log_file='error.log')
 
 class BaseEmployeeDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
@@ -92,16 +95,19 @@ class UpdateEmployeeDialog(BaseEmployeeDialog):
     def set_employee_info(self):
         url = URL + f'/employees/{self.employee_id}'
         # response = APIClient.get_request(url)
-        response = Worker.unpack_thread_queue(APIClient.get_request, url)
-        if response['success'] is True:
-            data = response['data']
-            self.employee_name_input.setText(data['employee_name'])
-            self.gender_combo.setCurrentText(data['gender'])
-            self.position_input.setText(data['position'])
-        else:
-            InfoBar.error(
-                title='加载失败',
-                content=response['message'],
-                parent=self,
-                duration=5000
-            )
+        try:
+            response = Worker.unpack_thread_queue(APIClient.get_request, url)
+            if response['success'] is True:
+                data = response['data']
+                self.employee_name_input.setText(data['employee_name'])
+                self.gender_combo.setCurrentText(data['gender'])
+                self.position_input.setText(data['position'])
+            else:
+                InfoBar.error(
+                    title='加载失败',
+                    content=response['message'],
+                    parent=self,
+                    duration=5000
+                )
+        except Exception as e:
+            error_logger.error(f'EmployeeDialog.set_employee_info: {str(e)}')

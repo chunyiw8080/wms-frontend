@@ -3,8 +3,8 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from login import LoginWindow
-from management import MainWindow
+from windows.login import LoginWindow
+from windows.management import MainWindow
 
 
 class MainApp:
