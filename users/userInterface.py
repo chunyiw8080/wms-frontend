@@ -94,7 +94,6 @@ class UserInterface(QWidget):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.table_widget.setItem(row, col, item)  #注意：第一列是多选框，所以在赋值时从第二列开始
-
         # 为每行添加编辑按钮
         action_widget = create_btn_widget(
             callback=lambda: self.update_user(user_info['user_id'])
@@ -120,7 +119,7 @@ class UserInterface(QWidget):
                 user_info = dialog.get_user_info()
 
                 response = Worker.unpack_thread_queue(APIClient.post_request, url, user_info)
-
+                print(response)
                 if response.get('success') is True:
                     InfoBar.success(title='更新成功', content='已完成用户资料更新', parent=self, duration=5000)
                     self.load_data()

@@ -56,7 +56,7 @@ class MainWindow(MSFluentWindow):
         self.addSubInterface(self.projectInterface, self.load_subinterface_icons().get("project_icon"), '项目管理')
         self.addSubInterface(self.providerInterface, self.load_subinterface_icons().get("provider_icon"), '供应商管理')
 
-        if self.payload.get('permissions') == 'S':
+        if self.payload.get('permissions') != 'W':
             self.addSubInterface(self.userInterface, self.load_subinterface_icons().get("user_icon"), '用户管理')
             self.addSubInterface(self.employeeInterface, self.load_subinterface_icons().get("employee_icon"), '员工管理')
             self.addSubInterface(self.logsInterface, self.load_subinterface_icons().get("logs_icon"), '操作日志')

@@ -10,6 +10,7 @@ from config import URL
 from backendRequests.jsonRequests import APIClient
 from utils.worker import Worker
 
+
 class BaseOrderDialog(MessageBoxBase):
     def __init__(self, title, parent=None):
         super().__init__(parent)
@@ -22,7 +23,6 @@ class BaseOrderDialog(MessageBoxBase):
             "被取消": "reject"
         }
         self.setup_ui()
-
 
     def setup_ui(self):
         self.titleLabel = SubtitleLabel(self.title, self)
@@ -41,10 +41,10 @@ class BaseOrderDialog(MessageBoxBase):
         self.count_input = LineEdit(self)
         self.provider_combo = ComboBox(self)
         self.provider_combo.addItem('')
-        self.provider_combo.addItems(load_providers())
+        self.provider_combo.addItems(load_providers() if load_projects() is not None else [])
         self.project_combo = ComboBox(self)
         self.project_combo.addItem('')
-        self.project_combo.addItems(load_projects())
+        self.project_combo.addItems(load_projects() if load_projects() is not None else [])
         self.status_combo = ComboBox(self)
         self.status_combo.addItems(['', '待处理', '已完成', '被取消'])
         self.employee_input = LineEdit(self)
@@ -132,17 +132,21 @@ class BaseOrderDialog(MessageBoxBase):
         }
         return order_info
 
+
 class AddOrderDialog(BaseOrderDialog):
     def __init__(self, parent=None):
         super().__init__('创建订单', parent)
-        # formatted_date = formatdate(timeval=time(), localtime=False, usegmt=True)
-        # self.published_input.setText(formatted_date)
-        self.order_id_input.setText('系统自动设置')
-        self.order_id_input.setDisabled(True)
-        current_date = datetime.date.today().strftime('%Y-%m-%d')
-        self.published_input.setText(current_date)
-        self.published_input.setDisabled(True)
-        self.yesButton.setText('添加')
+        try:
+            # formatted_date = formatdate(timeval=time(), localtime=False, usegmt=True)
+            # self.published_input.setText(formatted_date)
+            self.order_id_input.setText('系统自动设置')
+            self.order_id_input.setDisabled(True)
+            current_date = datetime.date.today().strftime('%Y-%m-%d')
+            self.published_input.setText(current_date)
+            self.published_input.setDisabled(True)
+            self.yesButton.setText('添加')
+        except Exception as e:
+            print(e)
 
 
 class UpdateOrderDialog(BaseOrderDialog):
@@ -158,7 +162,6 @@ class UpdateOrderDialog(BaseOrderDialog):
             'outbound': '出库'
         }
         self.set_order_info()
-
 
     def set_order_info(self):
         try:

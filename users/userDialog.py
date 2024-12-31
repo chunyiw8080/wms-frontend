@@ -29,11 +29,11 @@ class BaseUserDialog(MessageBoxBase):
         self.username_input = LineEdit(self)
         self.employee_combo = ComboBox(self)
         self.employee_combo.addItem('')
-        self.employee_combo.addItems(self.load_employees())
+        self.employee_combo.addItems(self.load_employees() if self.load_employees() is not None else [])
         self.status_combo = ComboBox(self)
         self.status_combo.addItems(['启用', '停用'])
         self.privilege_combo = ComboBox(self)
-        self.privilege_combo.addItems(['S', 'F', 'W'])
+        self.privilege_combo.addItems(['S', 'W'])
         self.password_input = PasswordLineEdit(self)
         self.verify_password_input = PasswordLineEdit(self)
 
@@ -115,14 +115,23 @@ class BaseUserDialog(MessageBoxBase):
             super().accept()
 
     def get_user_info(self):
-        password = self.password_input.text().strip()
-        return {
+        data = {
             "username": self.username_input.text().strip(),
             "employee_name": self.employee_combo.currentText(),
             "status": 1 if self.status_combo.currentText() == '启用' else 0,
-            "privilege": self.privilege_combo.currentText(),
-            "password": hash_password(password)
+            "privilege": self.privilege_combo.currentText()
         }
+        password = self.password_input.text().strip()
+        verified_password = self.verify_password_input.text().strip()
+        # print(f'password: {password}, verified_password: {verified_password}')
+        if password != '' and verified_password != '' and password == verified_password:
+            data.update({"password": hash_password(password)})
+
+        elif password != '' and verified_password != '' and password != verified_password:
+            InfoBar.error(title='输入错误', content='两次输入的密码不一致', parent=self, duration=5000)
+            return
+        print(data)
+        return data
 
 
 class AddUserDialog(BaseUserDialog):

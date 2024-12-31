@@ -410,7 +410,7 @@ class OrdersInterface(QWidget):
 
     def add_order(self):
         try:
-            dialog = AddOrderDialog(self)
+            dialog = AddOrderDialog(parent=self)
             if dialog.exec():
                 url = URL + f'/orders/create'
                 order_info = dialog.get_order_info()
